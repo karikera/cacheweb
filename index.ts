@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import * as http from "http";
 import * as stream from "stream";
 import * as fs from "fs";
