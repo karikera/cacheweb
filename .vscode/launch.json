@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Server",
+      "request": "launch",
+      "type": "node",
+      "program": "./index"
+    },
+    {
+      "name": "Launch Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:8080"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Server/Client",
+      "configurations": ["Launch Server", "Launch Chrome"],
+      "preLaunchTask": "tsc watch",
+      "stopAll": true
+    }
+  ]
+}
