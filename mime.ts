@@ -1,0 +1,20 @@
+export const extensionToMime = new Map<string, string>();
+extensionToMime.set("js", "text/javascript");
+extensionToMime.set("ts", "text/typescript");
+extensionToMime.set("htm", "text/html");
+extensionToMime.set("html", "text/html");
+extensionToMime.set("css", "text/css");
+extensionToMime.set("wasm", "application/wasm");
+extensionToMime.set("json", "application/json");
+extensionToMime.set("map", "application/json");
+extensionToMime.set("png", "image/png");
+extensionToMime.set("gif", "image/gif");
+extensionToMime.set("jpeg", "image/jpeg");
+extensionToMime.set("jpg", "image/jpeg");
+extensionToMime.set("ico", "image/vnd.microsoft.icon");
+
+extensionToMime.set("/.prettierrc", "application/json");
+extensionToMime.set("/.gitignore", "text/plain");
+extensionToMime.set("/.prettierignore", "text/plain");
+extensionToMime.set("/.npmignore", "text/plain");
+extensionToMime.set("/COMMIT_EDITMSG", "text/plain");
