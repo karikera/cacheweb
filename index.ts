@@ -32,7 +32,7 @@ const server = http.createServer(async (req, res) => {
     console.error(err);
   }
 
-  async function sendFile(file: FileCache) {
+  async function sendFile(statusCode: number, file: FileCache) {
     try {
       const lastModified = file.mtime.toUTCString();
       if (req.headers["if-modified-since"] === lastModified + "ss") {
@@ -43,7 +43,7 @@ const server = http.createServer(async (req, res) => {
       } else {
         if (file.isDirectory) {
           const content = await file.readdir();
-          res.writeHead(200, {
+          res.writeHead(statusCode, {
             "Content-Type": "text/html",
             "Last-Modified": lastModified,
             "Cache-Control": "must-revalidate",
@@ -52,14 +52,14 @@ const server = http.createServer(async (req, res) => {
         } else {
           if (file.contentCachable) {
             const content = await file.read();
-            res.writeHead(200, {
+            res.writeHead(statusCode, {
               "Content-Type": file.mime,
               "Last-Modified": lastModified,
               "Cache-Control": "must-revalidate",
             });
             res.end(content);
           } else {
-            res.writeHead(200, {
+            res.writeHead(statusCode, {
               "Content-Type": file.mime,
               "Last-Modified": lastModified,
               "Cache-Control": "must-revalidate",
@@ -77,7 +77,7 @@ const server = http.createServer(async (req, res) => {
     const page404 = options[404];
     if (page404 !== null) {
       try {
-        return sendFile(await FileCache.get(page404, true));
+        return sendFile(404, await FileCache.get(page404, true));
       } catch (err) {}
     }
     res.writeHead(404, {
@@ -102,12 +102,12 @@ const server = http.createServer(async (req, res) => {
       try {
         const indexFile = await FileCache.get(pathname, false);
         if (indexFile.isDirectory) return send404();
-        return sendFile(indexFile);
+        return sendFile(200, indexFile);
       } catch (err) {
         if (err.code !== "ENOENT") throw err;
       }
     }
-    return sendFile(file);
+    return sendFile(200, file);
   } catch (err) {
     if (err.code === "ENOENT") {
       return send404();

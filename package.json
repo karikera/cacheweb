@@ -1,8 +1,12 @@
 {
   "name": "webme",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "",
   "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/karikera/webme.git"
+  },
   "bin": {
     "webme": "index.js"
   },
