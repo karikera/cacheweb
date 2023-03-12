@@ -23,7 +23,7 @@ npm i -g webme
 webme
 ```
 
-## .webme.json
+## .webmerc.json
 
 ```json
 {

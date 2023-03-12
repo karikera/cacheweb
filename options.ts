@@ -12,10 +12,10 @@ export interface CacheWebOptions {
 
 let opts: CacheWebOptions;
 try {
-  opts = JSON.parse(fs.readFileSync(".webme.json", "utf8"));
+  opts = JSON.parse(fs.readFileSync(".webmerc.json", "utf8"));
 } catch (err) {
   if (err.code !== "ENOENT") {
-    console.error(".webme.json is invalid");
+    console.error(".webmerc.json is invalid");
     console.error(err.message);
     process.exit(-1);
   }
@@ -23,13 +23,13 @@ try {
 }
 
 if (typeof opts !== "object") {
-  console.error(".webme.json is not object");
+  console.error(".webmerc.json is not object");
   process.exit(-1);
 }
 
 // read args
 
-let argi = 1;
+let argi = 2;
 const argn = process.argv.length;
 
 function nextArg(): string | null {
@@ -38,14 +38,15 @@ function nextArg(): string | null {
 }
 
 _done: for (;;) {
-  switch (nextArg()) {
+  const value = nextArg();
+  switch (value) {
     case "--port":
       opts.port = +nextArg()!;
       break;
     case null:
       break _done;
     default:
-      opts.root = nextArg()!;
+      opts.root = value;
       break;
   }
 }

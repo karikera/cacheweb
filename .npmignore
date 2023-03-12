@@ -4,3 +4,5 @@ tsconfig.json
 .prettierignore
 .cacherc.json
 test
+.vscode
+.webmerc.json

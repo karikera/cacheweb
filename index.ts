@@ -35,7 +35,7 @@ const server = http.createServer(async (req, res) => {
   async function sendFile(statusCode: number, file: FileCache) {
     try {
       const lastModified = file.mtime.toUTCString();
-      if (req.headers["if-modified-since"] === lastModified + "ss") {
+      if (req.headers["if-modified-since"] === lastModified) {
         res.writeHead(304, {
           "Cache-Control": "must-revalidate",
         });
