@@ -105,6 +105,7 @@ const server = http.createServer(async (req, res) => {
         return sendFile(200, indexFile);
       } catch (err) {
         if (err.code !== "ENOENT") throw err;
+        if (options[404] !== null) return send404();
       }
     }
     return sendFile(200, file);
