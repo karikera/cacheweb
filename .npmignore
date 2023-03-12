@@ -2,3 +2,5 @@
 tsconfig.json
 .prettierrc
 .prettierignore
+.cacherc.json
+test

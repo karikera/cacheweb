@@ -1,11 +1,13 @@
 import * as fs from "fs";
 import * as path from "path";
-import { extensionToMime } from "./mime";
+import { getMimeType } from "./mime";
+import { options } from "./options";
 
 const CACHE_MAX = 10 * 1024 * 1024;
 const BASIC_SIZE = 256;
 const UPDATE_DURATION = 10000;
 const UPDATE_MAX_HIT = 10000;
+const HIT_REMOVING_THRESHOLD = 0.4;
 
 class CacheList {
   private readonly map = new Map<string, FileCache>();
@@ -22,7 +24,7 @@ class CacheList {
       file.hitCount *= 0.5;
     }
     let node = this.cachedFirst;
-    while (node !== null && node.hitCount < 0.2) {
+    while (node !== null && node.hitCount < HIT_REMOVING_THRESHOLD) {
       const next: FileCache | null = node.next;
       node.next = null;
       node.prev = null;
@@ -143,6 +145,7 @@ class CacheList {
           hitCount -= file.hitCount;
           if (hitCount <= 0) {
             newCacheSize = BASIC_SIZE;
+            target.contentMtime = 0;
             target.content = null;
             cached = false;
             break _return;
@@ -159,7 +162,7 @@ class CacheList {
     return cached;
   }
 
-  hit(file: FileCache, size: number): boolean {
+  hit(file: FileCache): boolean {
     file.hitCount++;
     this.totalHit++;
 
@@ -193,7 +196,7 @@ class CacheList {
       this._sortNode(file);
     }
 
-    let newCacheSize = size + BASIC_SIZE;
+    let newCacheSize = file.size + BASIC_SIZE;
     if (newCacheSize > CACHE_MAX) return false;
     if (file.cacheSize === newCacheSize) return true;
 
@@ -208,8 +211,19 @@ class CacheList {
     return this.makeNewSpace(file, newCacheSize);
   }
 
-  get(filepath: string): FileCache {
-    filepath = path.join(dirroot, filepath);
+  get(filepath: string, allowAbsolute: boolean): FileCache {
+    filepath = path.normalize(filepath);
+    if (!allowAbsolute) {
+      if (
+        path.isAbsolute(filepath) ||
+        filepath.split(path.sep, 1)[0] === ".."
+      ) {
+        const err: NodeJS.ErrnoException = Error("access denided");
+        err.code = "ENOENT";
+        throw err;
+      }
+    }
+
     let file = this.map.get(filepath);
     if (file === undefined) {
       file = new FileCache(filepath);
@@ -221,14 +235,8 @@ class CacheList {
 
 const cacheList = new CacheList();
 
-const dirroot = process.cwd();
-
 export class FileCache {
-  mtime = 0;
   keepTo = 0;
-  statResult: Promise<fs.Stats> | null = null;
-  content: Buffer | null = null;
-  ext: string;
   mime: string;
 
   hitCount = 0;
@@ -237,77 +245,100 @@ export class FileCache {
   next: FileCache | null = null;
   prev: FileCache | null = null;
 
+  size: number;
+  mtime: Date = null as any;
+  isDirectory = false;
+  mtimeMs = 0;
+
+  content: Buffer | null = null;
+  contentMtime = 0;
+
+  private updateProm: Promise<void> | null = null;
+
   constructor(public filepath: string) {
-    this.ext = path.extname(filepath).substr(1);
-    let mime = extensionToMime.get(this.ext || "/" + path.basename(filepath));
-    if (mime === undefined) {
-      mime = "application/octet-stream";
-      if (this.ext !== "")
-        console.error(`unknown extension: ${path.basename(filepath)}`);
-    }
-    this.mime = mime;
+    this.mime = getMimeType(filepath);
   }
 
-  stat(): Promise<fs.Stats> {
-    if (this.statResult !== null) {
+  private _updateStat(): Promise<void> {
+    if (this.updateProm !== null) {
       const now = Date.now();
-      if (now < this.keepTo) return this.statResult;
+      if (now < this.keepTo) return this.updateProm;
       this.keepTo = now + 100;
     }
-    const statResult = fs.promises.stat(this.filepath);
-    return (this.statResult = statResult);
+    const statResult = fs.promises.stat(
+      options.root + path.sep + this.filepath
+    );
+    return (this.updateProm = statResult.then(
+      (stat) => {
+        this.size = stat.size;
+        this.mtime = stat.mtime;
+        this.mtimeMs = stat.mtimeMs;
+        this.isDirectory = stat.isDirectory();
+        this.contentCachable = cacheList.hit(this);
+      },
+      (err) => {
+        this.size = 0;
+        this.mtime = null as any;
+        this.mtimeMs = 0;
+        this.isDirectory = false;
+        this.contentCachable = cacheList.hit(this);
+        throw err;
+      }
+    ));
   }
 
   async read(): Promise<Buffer> {
     if (this.content !== null) {
-      const stat = await this.stat();
-      const mtime = stat.mtimeMs;
-      if (mtime === this.mtime) {
+      if (this.mtimeMs === this.contentMtime) {
         return this.content;
       }
-      this.mtime = mtime;
     }
-    const content = await fs.promises.readFile(this.filepath);
+    const content = await fs.promises.readFile(
+      options.root + path.sep + this.filepath
+    );
     if (this.contentCachable) {
       this.content = content;
+      this.contentMtime = this.mtimeMs;
+    } else {
+      this.content = content;
+      this.contentMtime = 0;
     }
     return content;
   }
 
   async readdir(): Promise<Buffer> {
     if (this.content !== null) {
-      const stat = await this.stat();
-      const mtime = stat.mtimeMs;
-      if (mtime === this.mtime) {
+      if (this.mtimeMs === this.contentMtime) {
         return this.content;
       }
-      this.mtime = mtime;
+      this.contentMtime = this.mtimeMs;
     }
-    const diruri = path.relative(dirroot, this.filepath).replace(/\\/g, "/");
+    const diruri = path
+      .relative(options.root, this.filepath)
+      .replace(/\\/g, "/");
     let content = "<body>";
-    for (const name of await fs.promises.readdir(this.filepath)) {
+    for (const name of await fs.promises.readdir(
+      options.root + path.sep + this.filepath
+    )) {
       content += `<a href="${diruri}/${name}">${name}</a><br>`;
     }
     content += "</body>";
     const contentBuffer = Buffer.from(content);
-    if (this.contentCachable) {
+    if (contentBuffer.length < CACHE_MAX) {
       this.content = contentBuffer;
+      this.contentMtime = this.contentMtime;
+    } else {
+      this.content = null;
+      this.contentMtime = 0;
     }
     return contentBuffer;
   }
-}
-
-export const fileCache = {
-  async get(filepath: string): Promise<FileCache> {
-    const file = cacheList.get(filepath);
-    const stat = await file.stat().catch(() => null);
-    file.contentCachable = cacheList.hit(file, stat !== null ? stat.size : 0);
+  static async get(
+    filepath: string,
+    allowAbsolute: boolean
+  ): Promise<FileCache> {
+    const file = cacheList.get(filepath, allowAbsolute);
+    await file._updateStat();
     return file;
-  },
-  stat(filepath: string): Promise<fs.Stats> {
-    return cacheList.get(filepath).stat();
-  },
-  read(filepath: string): Promise<Buffer> {
-    return cacheList.get(filepath).read();
-  },
-};
+  }
+}

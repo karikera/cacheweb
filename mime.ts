@@ -1,4 +1,8 @@
-export const extensionToMime = new Map<string, string>();
+import { options } from "./options";
+import globToRegExp = require("glob-to-regexp");
+import * as path from "path";
+
+const extensionToMime = new Map<string, string>();
 extensionToMime.set("js", "text/javascript");
 extensionToMime.set("ts", "text/typescript");
 extensionToMime.set("htm", "text/html");
@@ -12,9 +16,33 @@ extensionToMime.set("gif", "image/gif");
 extensionToMime.set("jpeg", "image/jpeg");
 extensionToMime.set("jpg", "image/jpeg");
 extensionToMime.set("ico", "image/vnd.microsoft.icon");
+extensionToMime.set("md", "text/markdown");
 
-extensionToMime.set("/.prettierrc", "application/json");
-extensionToMime.set("/.gitignore", "text/plain");
-extensionToMime.set("/.prettierignore", "text/plain");
-extensionToMime.set("/.npmignore", "text/plain");
-extensionToMime.set("/COMMIT_EDITMSG", "text/plain");
+const nameToMime = new Map<string, string>();
+nameToMime.set(".prettierrc", "application/json");
+nameToMime.set(".gitignore", "text/plain");
+nameToMime.set(".prettierignore", "text/plain");
+nameToMime.set(".npmignore", "text/plain");
+nameToMime.set("COMMIT_EDITMSG", "text/plain");
+
+const nameMatch: [RegExp, string][] = [];
+
+for (const [key, value] of Object.entries(options.mime)) {
+  nameMatch.push([globToRegExp(key), value]);
+}
+
+export function getMimeType(filepath: string): string {
+  const rpath = path.relative(options.root, filepath);
+  const parsed = path.parse(rpath);
+
+  let mimeType: string | undefined;
+  mimeType = extensionToMime.get(parsed.ext.substr(1));
+  if (mimeType !== undefined) return mimeType;
+  mimeType = nameToMime.get(parsed.base);
+  if (mimeType !== undefined) return mimeType;
+
+  for (const [regexp, type] of nameMatch) {
+    if (regexp.test(rpath)) return type;
+  }
+  return "application/octet-stream";
+}

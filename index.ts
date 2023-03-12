@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
+import * as fs from "fs";
 import * as http from "http";
 import * as stream from "stream";
-import * as fs from "fs";
-import { FileCache, fileCache } from "./filecache";
+import { FileCache } from "./filecache";
+import { options } from "./options";
 
 function pipeStream(
   write: stream.Writable,
@@ -17,30 +18,10 @@ function pipeStream(
   });
 }
 
-class ArgReader {
-  private i = 1;
-  private readonly n = process.argv.length;
-
-  next(): string | null {
-    if (this.i >= this.n) return null;
-    return process.argv[this.i++];
-  }
-}
-const args = new ArgReader();
-
-let port = 8080;
-_done: for (;;) {
-  switch (args.next()) {
-    case "--port":
-      port = +args.next()!;
-      break;
-    case null:
-      break _done;
-  }
-}
+const port = options.port;
 
 const server = http.createServer(async (req, res) => {
-  function emitErrorPage(err: Error) {
+  function sendErrorPage(err: Error) {
     res.writeHead(500, {
       "Content-Type": "text/html",
       "Cache-Control": "no-cache",
@@ -51,6 +32,61 @@ const server = http.createServer(async (req, res) => {
     console.error(err);
   }
 
+  async function sendFile(file: FileCache) {
+    try {
+      const lastModified = file.mtime.toUTCString();
+      if (req.headers["if-modified-since"] === lastModified + "ss") {
+        res.writeHead(304, {
+          "Cache-Control": "must-revalidate",
+        });
+        res.end();
+      } else {
+        if (file.isDirectory) {
+          const content = await file.readdir();
+          res.writeHead(200, {
+            "Content-Type": "text/html",
+            "Last-Modified": lastModified,
+            "Cache-Control": "must-revalidate",
+          });
+          res.end(content);
+        } else {
+          if (file.contentCachable) {
+            const content = await file.read();
+            res.writeHead(200, {
+              "Content-Type": file.mime,
+              "Last-Modified": lastModified,
+              "Cache-Control": "must-revalidate",
+            });
+            res.end(content);
+          } else {
+            res.writeHead(200, {
+              "Content-Type": file.mime,
+              "Last-Modified": lastModified,
+              "Cache-Control": "must-revalidate",
+            });
+            await pipeStream(res, fs.createReadStream(file.filepath));
+          }
+        }
+      }
+    } catch (err) {
+      sendErrorPage(err);
+    }
+  }
+
+  async function send404() {
+    const page404 = options[404];
+    if (page404 !== null) {
+      try {
+        return sendFile(await FileCache.get(page404, true));
+      } catch (err) {}
+    }
+    res.writeHead(404, {
+      "Content-Type": "text/html",
+      "Cache-Control": "no-cache",
+    });
+    res.end("<body>File not found: " + pathname);
+  }
+
   let pathname = req.url;
   if (pathname === undefined) return;
   if (pathname === "/") {
@@ -59,79 +95,26 @@ const server = http.createServer(async (req, res) => {
     pathname = pathname.substr(1);
   }
 
-  let dirFile: FileCache | null = null;
-  const ifModifiedSince = req.headers["if-modified-since"];
-
   try {
-    for (;;) {
-      const file = await fileCache.get(pathname);
-      const stat = await file.stat();
-      if (stat.isDirectory()) {
-        dirFile = file;
-        pathname += "/index.html";
-        continue;
+    const file = await FileCache.get(pathname, false);
+    if (file.isDirectory) {
+      pathname += "/index.html";
+      try {
+        const indexFile = await FileCache.get(pathname, false);
+        if (indexFile.isDirectory) return send404();
+        return sendFile(indexFile);
+      } catch (err) {
+        if (err.code !== "ENOENT") throw err;
       }
-      const lastModified = stat.mtime.toUTCString();
-      if (ifModifiedSince === lastModified) {
-        res.writeHead(304, {
-          "Cache-Control": "must-revalidate",
-        });
-        res.end();
-      } else {
-        if (file.contentCachable) {
-          const content = await file.read();
-          res.writeHead(200, {
-            "Content-Type": file.mime,
-            "Last-Modified": lastModified,
-            "Cache-Control": "must-revalidate",
-          });
-          res.end(content);
-        } else {
-          res.writeHead(200, {
-            "Content-Type": file.mime,
-            "Last-Modified": lastModified,
-            "Cache-Control": "must-revalidate",
-          });
-          pipeStream(res, fs.createReadStream(file.filepath));
-        }
-      }
-      return;
     }
+    return sendFile(file);
   } catch (err) {
     if (err.code === "ENOENT") {
-      if (dirFile !== null) {
-        try {
-          const stat = await dirFile.stat();
-          const lastModified = stat.mtime.toUTCString();
-          if (ifModifiedSince === lastModified) {
-            res.writeHead(304, {
-              "Cache-Control": "must-revalidate",
-            });
-            res.end();
-          } else {
-            const content = await dirFile.readdir();
-            res.writeHead(200, {
-              "Content-Type": "text/html",
-              "Last-Modified": lastModified,
-              "Cache-Control": "must-revalidate",
-            });
-            res.end(content);
-          }
-        } catch (err) {
-          emitErrorPage(err);
-        }
-      } else {
-        res.writeHead(404, {
-          "Content-Type": "text/html",
-          "Cache-Control": "no-cache",
-        });
-        res.end("<body>File not found: " + pathname);
-      }
+      return send404();
     } else {
-      emitErrorPage(err);
+      return sendErrorPage(err);
     }
   }
-  res.end();
 });
 server.listen(port, () => {
   console.log(`listening ${port} port`);

@@ -5,6 +5,8 @@
     "module": "CommonJS",
     "alwaysStrict": true,
     "strictNullChecks": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
     "lib": [],
     "sourceMap": true
   }
