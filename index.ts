@@ -3,6 +3,7 @@
 import * as fs from "fs";
 import * as http from "http";
 import * as stream from "stream";
+import * as path from "path";
 import { FileCache } from "./filecache";
 import { options } from "./options";
 
@@ -21,12 +22,19 @@ function pipeStream(
 const port = options.port;
 
 const server = http.createServer(async (req, res) => {
-  function sendErrorPage(err: Error) {
-    res.writeHead(500, {
+  function sendHtml(status: number, text: string) {
+    const content = Buffer.from(text, "utf8");
+    res.writeHead(status, {
       "Content-Type": "text/html",
       "Cache-Control": "no-cache",
+      "Content-Length": content.length,
     });
-    res.end(
+    res.end(content);
+  }
+
+  function sendErrorPage(err: Error) {
+    sendHtml(
+      500,
       "<body>Internal Server Error<br>" + err.stack!.replace(/\n/g, "<br>")
     );
     console.error(err);
@@ -47,23 +55,31 @@ const server = http.createServer(async (req, res) => {
             "Content-Type": "text/html",
             "Last-Modified": lastModified,
             "Cache-Control": "must-revalidate",
+            "Content-Length": content.length,
           });
           res.end(content);
         } else {
+          const header: http.OutgoingHttpHeaders = {
+            "Last-Modified": lastModified,
+            "Cache-Control": "must-revalidate",
+            "Content-Length": file.size,
+          };
+          if (file.mime === null) {
+            header["Content-Type"] = "application/octet-stream";
+            header["Content-Disposition"] =
+              "attachment; filename=" +
+              path
+                .basename(file.filepath)
+                .replace(/ /g, "_")
+                .replace(/[^a-zA-Z0-9_.]/g, "");
+          } else {
+            header["Content-Type"] = file.mime;
+          }
+          res.writeHead(statusCode, header);
           if (file.contentCachable) {
             const content = await file.read();
-            res.writeHead(statusCode, {
-              "Content-Type": file.mime,
-              "Last-Modified": lastModified,
-              "Cache-Control": "must-revalidate",
-            });
             res.end(content);
           } else {
-            res.writeHead(statusCode, {
-              "Content-Type": file.mime,
-              "Last-Modified": lastModified,
-              "Cache-Control": "must-revalidate",
-            });
             await pipeStream(res, fs.createReadStream(file.filepath));
           }
         }
@@ -80,11 +96,7 @@ const server = http.createServer(async (req, res) => {
         return sendFile(404, await FileCache.get(page404, true));
       } catch (err) {}
     }
-    res.writeHead(404, {
-      "Content-Type": "text/html",
-      "Cache-Control": "no-cache",
-    });
-    res.end("<body>File not found: " + pathname);
+    sendHtml(404, "<body>File not found: " + pathname);
   }
 
   let pathname = req.url;

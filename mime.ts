@@ -31,7 +31,7 @@ for (const [key, value] of Object.entries(options.mime)) {
   nameMatch.push([globToRegExp(key), value]);
 }
 
-export function getMimeType(filepath: string): string {
+export function getMimeType(filepath: string): string | null {
   const rpath = path.relative(options.root, filepath);
   const parsed = path.parse(rpath);
 
@@ -44,5 +44,5 @@ export function getMimeType(filepath: string): string {
   for (const [regexp, type] of nameMatch) {
     if (regexp.test(rpath)) return type;
   }
-  return "application/octet-stream";
+  return null;
 }

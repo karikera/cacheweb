@@ -237,7 +237,7 @@ const cacheList = new CacheList();
 
 export class FileCache {
   keepTo = 0;
-  mime: string;
+  mime: string | null;
 
   hitCount = 0;
   cacheSize = -1;

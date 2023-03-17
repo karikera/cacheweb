@@ -1,3 +1,5 @@
 {
-  "root": "test"
+  "root": "test",
+  "port": 8090,
+  "404": null
 }
