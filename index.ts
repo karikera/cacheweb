@@ -80,7 +80,10 @@ const server = http.createServer(async (req, res) => {
             const content = await file.read();
             res.end(content);
           } else {
-            await pipeStream(res, fs.createReadStream(file.filepath));
+            await pipeStream(
+              res,
+              fs.createReadStream(options.root + path.sep + file.filepath)
+            );
           }
         }
       }
