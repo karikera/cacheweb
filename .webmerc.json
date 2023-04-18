@@ -1,5 +1,6 @@
 {
-  "root": "test",
+  "root": "test2",
   "port": 8090,
-  "404": null
+  "404": "404.html",
+  "showDirectory": true
 }

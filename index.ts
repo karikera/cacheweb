@@ -4,8 +4,9 @@ import * as fs from "fs";
 import * as http from "http";
 import * as stream from "stream";
 import * as path from "path";
+import * as net from "net";
 import { FileCache } from "./filecache";
-import { options } from "./options";
+import { onOptionLoaded, options } from "./options";
 
 function pipeStream(
   write: stream.Writable,
@@ -19,9 +20,10 @@ function pipeStream(
   });
 }
 
-const port = options.port;
-
-const server = http.createServer(async (req, res) => {
+async function processHttp(
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+) {
   function sendHtml(status: number, text: string) {
     const content = Buffer.from(text, "utf8");
     res.writeHead(status, {
@@ -113,14 +115,18 @@ const server = http.createServer(async (req, res) => {
   try {
     const file = await FileCache.get(pathname, false);
     if (file.isDirectory) {
-      pathname += "/index.html";
-      try {
-        const indexFile = await FileCache.get(pathname, false);
-        if (indexFile.isDirectory) return send404();
-        return sendFile(200, indexFile);
-      } catch (err) {
-        if (err.code !== "ENOENT") throw err;
-        if (options[404] !== null) return send404();
+      if (options.index !== null) {
+        pathname += "/" + options.index;
+        try {
+          const indexFile = await FileCache.get(pathname, false);
+          if (indexFile.isDirectory) return send404();
+          return sendFile(200, indexFile);
+        } catch (err) {
+          if (err.code !== "ENOENT") throw err;
+        }
+      }
+      if (!options.showDirectory) {
+        return send404();
       }
     }
     return sendFile(200, file);
@@ -131,7 +137,33 @@ const server = http.createServer(async (req, res) => {
       return sendErrorPage(err);
     }
   }
-});
-server.listen(port, () => {
-  console.log(`listening ${port} port`);
+}
+
+let server: http.Server | null = null;
+let openedPort = -1;
+const sockets = new Set<net.Socket>();
+
+onOptionLoaded.push(() => {
+  const port = options.port;
+  if (openedPort === port) return;
+  openedPort = port;
+  if (server !== null) {
+    server.close();
+    server = null;
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+    sockets.clear();
+  }
+  if (port < 0) return;
+  server = http.createServer(processHttp);
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => {
+      sockets.delete(socket);
+    });
+  });
+  server.listen(port, () => {
+    console.log(`listening ${port} port`);
+  });
 });

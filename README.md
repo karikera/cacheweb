@@ -32,6 +32,8 @@ webme
   "mime": {
     "**/*.js": "text/javascript" // default
   },
-  "404": "404.html" // default, root relative path, nullable
+  "404": "404.html", // default, root relative path, nullable
+  "index": "index.html", // default, nullable
+  "showDirectory": true // default
 }
 ```

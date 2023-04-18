@@ -37,10 +37,17 @@ class CacheList {
       this.cachedFirst = node;
       if (node !== null) node.prev = null;
     }
+
     console.log(`reducing...`);
     console.log(`total hit: ${this.totalHit.toFixed(1)}`);
     console.log(`total cache: ${this.totalCacheSize}Bytes`);
     console.log(`total files: ${this.map.size}`);
+    const zeroReported =
+      this.totalHit === 0 && this.totalCacheSize === 0 && this.map.size === 0;
+    if (zeroReported && this.updateInterval !== null) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
   }
 
   private _deleteTo(target: FileCache, to: FileCache | null) {
