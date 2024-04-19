@@ -8,6 +8,7 @@ export interface CacheWebOptions {
   [404]: string | null;
   index: string | null;
   showDirectory: boolean;
+  responseHeaders: Record<string, string>;
 }
 
 // read options
@@ -84,6 +85,9 @@ export function loadOptionsSync(): void {
     for (const [key, value] of Object.entries(mime)) {
       if (typeof value !== "string") delete mime[key];
     }
+  }
+  if (typeof opts.responseHeaders !== "object") {
+    opts.responseHeaders = {};
   }
   options = opts;
   for (const onload of onOptionLoaded) onload();

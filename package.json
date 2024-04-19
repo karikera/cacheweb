@@ -1,6 +1,6 @@
 {
   "name": "webme",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "",
   "main": "index.js",
   "repository": {
@@ -18,6 +18,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/glob-to-regexp": "^0.4.4",
     "@types/mime-types": "^2.1.1",
     "@types/node": "^18.14.6",
     "prettier": "^2.8.4",

@@ -20,13 +20,21 @@ function pipeStream(
   });
 }
 
+function writeHead(
+  target: http.ServerResponse,
+  status: number,
+  headers: http.OutgoingHttpHeaders
+) {
+  target.writeHead(status, Object.assign(headers, options.responseHeaders));
+}
+
 async function processHttp(
   req: http.IncomingMessage,
   res: http.ServerResponse
 ) {
   function sendHtml(status: number, text: string) {
     const content = Buffer.from(text, "utf8");
-    res.writeHead(status, {
+    writeHead(res, status, {
       "Content-Type": "text/html",
       "Cache-Control": "no-cache",
       "Content-Length": content.length,
@@ -46,14 +54,14 @@ async function processHttp(
     try {
       const lastModified = file.mtime.toUTCString();
       if (req.headers["if-modified-since"] === lastModified) {
-        res.writeHead(304, {
+        writeHead(res, 304, {
           "Cache-Control": "must-revalidate",
         });
         res.end();
       } else {
         if (file.isDirectory) {
           const content = await file.readdir();
-          res.writeHead(statusCode, {
+          writeHead(res, statusCode, {
             "Content-Type": "text/html",
             "Last-Modified": lastModified,
             "Cache-Control": "must-revalidate",
@@ -77,7 +85,7 @@ async function processHttp(
           } else {
             header["Content-Type"] = file.mime;
           }
-          res.writeHead(statusCode, header);
+          writeHead(res, statusCode, header);
           if (file.contentCachable) {
             const content = await file.read();
             res.end(content);
